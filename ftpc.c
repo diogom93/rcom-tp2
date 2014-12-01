@@ -20,6 +20,8 @@
 #define BUF_SIZE 1024
 #define C_PORT 21
 
+void check_URL(char *url, char *user, char *password, char *host, char *path);
+
 int main(int argc, char *argv[]) 
 {
 	int sfd, res;
@@ -37,16 +39,91 @@ int main(int argc, char *argv[])
 			printf("Error! URL not specified!\n");
 			exit(1);
 		}
+		
+	check_URL(argv[1], user, password, host, path);	
+	printf("User: %s\nPass: %s\nHost: %s\nPath: %s\n", user, password, host, path);
 	
-	if (sscanf(argv[1], "ftp://%[^:]:%[^@]@%[^/]/%s", user, password, host, path) != 4) {
-		if (sscanf(argv[1], "ftp://%[^@]@%[^/]/%s", user, host, path) != 3) {
-			if (sscanf(argv[1], "ftp://%[^/]/%s", host, path) == 2)
-				strcpy(user, "anonymous");
-		} else 
-			printf("Error! URL should be in the following format: ftp://<user>:<password>@<host>/<url-path>\n");
+	h = gethostbyname(host);
+	if (h == NULL) {
+		printf("Couldn't find host!\n");
+		exit(1);
 	}
 	
-	printf("user: %s\npass: %s\nhost: %s\npath: %s\n", user, password, host, path);
+	/*		
+	memset(&channel, 0, sizeof(channel));
+		
+	By using AF_UNSPEC we make the program independent of IP version
+		
+	channel.sin_family = AF_UNSPEC;
+	sfd = socket(PF_UNSPEC, SOCK_STREAM, IPPROTO_TCP);
+		
+	if (sfd < 0) {
+		printf("Couldn't create socket!\n");
+		exit(1);
+	}
+		
+	memcpy(&channel.sin_addr.s_addr, h->h_addr, h->h_length);
+	channel.sin_port = htons(C_PORT);
+		
+	res = connect(sfd, (struct sockaddr *)&channel, sizeof(channel));
+		
+	if (res < 0) {
+		printf("Couldn't connect!\n");
+		exit(1);
+	}
+		
+	while (true) {
+		res = read(sfd, buf, BUF_SIZE);
+		if (res < 0) {
+			printf("Error reading file!");
+			exit(1);
+		} else {
+			write(STDOUT_FILENO, buf, res);
+			break;
+		}
+	}*/
 			
 	return 0;
+}
+
+void check_URL(char *url, char *user, char *password, char *host, char *path) {
+	if (sscanf(url, "ftp://%[^:]:%[^@]@%[^/]/%s", user, password, host, path) == 4) {
+		return;
+	} else if (sscanf(url, "ftp://%[^:]:%[^@]@%[^/]", user, password, host) == 3) {
+		strcpy(path, "Empty");
+	} else if (sscanf(url, "ftp://%[^:@]:@%[^/]/%s", user, host, path) == 3) {
+		return;
+	} else if (sscanf(url, "ftp://%[^:@]@%[^/]/%s", user, host, path) == 3) {
+		strcpy(password, "Empty");
+		return;
+	} else if (sscanf(url, "ftp://%[^:@]:@%[^/]", user, host) == 2) {
+		strcpy(password, "Empty");
+		strcpy(path, "Empty");
+		return;
+	} else if (sscanf(url, "ftp://%[^:@]@%[^/]", user, host) == 2) {
+		strcpy(password, "Empty");
+		strcpy(path, "Empty");
+		return;
+	} else if (sscanf(url, "ftp://@%[^:@/]/%s", host, path) == 2) {
+		strcpy(password, "Empty");
+		strcpy(user, "anonymous");
+		return;
+	} else if (sscanf(url, "ftp://%[^:@/]/%s", host, path) == 2) {
+		strcpy(password, "Empty");
+		strcpy(user, "anonymous");
+		return;
+	} else if (sscanf(url, "ftp://@%[^:@/]/", host) == 1) {
+		strcpy(password, "Empty");
+		strcpy(user, "anonymous");
+		strcpy(path, "Empty");
+		return;
+	} else if (sscanf(url, "ftp://%[^:@/]/", host) == 1) {
+		strcpy(password, "Empty");
+		strcpy(user, "anonymous");
+		strcpy(path, "Empty");
+		return;
+	} else {
+		printf("Error! URL should be in the following format: //<user>:<password>@<host>/<url-path>\n");
+		exit(1);
+	}
 }
