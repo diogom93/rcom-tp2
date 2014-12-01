@@ -24,7 +24,7 @@ void check_URL(char *url, char *user, char *password, char *host, char *path);
 
 int main(int argc, char *argv[]) 
 {
-	int sfd, res;
+	int sd, res;
 	char buf[BUF_SIZE];
 	char user[64], password[64], host[128], path[512];
 	struct hostent *h;
@@ -49,40 +49,26 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 	
-	/*		
 	memset(&channel, 0, sizeof(channel));
+	channel.sin_family = AF_INET;
+	memcpy(&channel.sin_addr.s_addr, h->h_addr, h->h_length);
+	channel.sin_port = htons(C_PORT);
+	
+	sd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 		
-	By using AF_UNSPEC we make the program independent of IP version
-		
-	channel.sin_family = AF_UNSPEC;
-	sfd = socket(PF_UNSPEC, SOCK_STREAM, IPPROTO_TCP);
-		
-	if (sfd < 0) {
+	if (sd < 0) {
 		printf("Couldn't create socket!\n");
 		exit(1);
 	}
 		
-	memcpy(&channel.sin_addr.s_addr, h->h_addr, h->h_length);
-	channel.sin_port = htons(C_PORT);
-		
-	res = connect(sfd, (struct sockaddr *)&channel, sizeof(channel));
+	res = connect(sd, (struct sockaddr *)&channel, sizeof(channel));
 		
 	if (res < 0) {
 		printf("Couldn't connect!\n");
 		exit(1);
 	}
-		
-	while (true) {
-		res = read(sfd, buf, BUF_SIZE);
-		if (res < 0) {
-			printf("Error reading file!");
-			exit(1);
-		} else {
-			write(STDOUT_FILENO, buf, res);
-			break;
-		}
-	}*/
-			
+	
+	close(sd);
 	return 0;
 }
 
