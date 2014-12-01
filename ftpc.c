@@ -7,53 +7,46 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <signal.h>
 #include <netdb.h>
-#include <strings.h>
+#include <arpa/inet.h>
 
-#define VER "0.1"
-#define SERVER_PORT 6000
-#define SERVER_ADDR "192.168.28.96"
+#define BUF_SIZE 1024
+#define C_PORT 21
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) 
+{
+	int sfd, res;
+	char buf[BUF_SIZE];
+	char user[64], password[64], host[128], path[512];
+	struct hostent *h;
+	struct sockaddr_in channel;
 
-	int	sockfd;
-	struct	sockaddr_in server_addr;
-	char	buf[] = "Mensagem de teste na travessia da pilha TCP/IP\n";  
-	int	bytes;
+	printf("FTP Client\n");
+	printf("FEUP - Computer Networks - 2014/2015\n");
+	printf("Developed by:\n* Diogo Martins\n* Hugo Fonseca\n* Nuno Pires\n");
+	printf("Last compiled on %s at %s\n\n", __DATE__, __TIME__);
 	
-	printf("FTP Client - Version %s\n", VER);
-	printf("Last compiled on %s at %s", __DATE__, __TIME__);
-
-		/*server address handling*/
-	bzero((char*)&server_addr,sizeof(server_addr));
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_addr.s_addr = inet_addr(SERVER_ADDR);	/*32 bit Internet address network byte ordered*/
-	server_addr.sin_port = htons(SERVER_PORT);		/*server TCP port must be network byte ordered */
-    
-	/*open an TCP socket*/
-	if ((sockfd = socket(AF_INET,SOCK_STREAM,0)) < 0) {
-    		perror("socket()");
-        	exit(0);
-    	}
-	/*connect to the server*/
-    	if(connect(sockfd, 
-	           (struct sockaddr *)&server_addr, 
-		   sizeof(server_addr)) < 0){
-        	perror("connect()");
-		exit(0);
+	if (argc < 2) {
+			printf("Error! URL not specified!\n");
+			exit(1);
+		}
+	
+	if (sscanf(argv[1], "ftp://%[^:]:%[^@]@%[^/]/%s", user, password, host, path) != 4) {
+		if (sscanf(argv[1], "ftp://%[^@]@%[^/]/%s", user, host, path) != 3) {
+			if (sscanf(argv[1], "ftp://%[^/]/%s", host, path) == 2)
+				strcpy(user, "anonymous");
+		} else 
+			printf("Error! URL should be in the following format: ftp://<user>:<password>@<host>/<url-path>\n");
 	}
-    	/*send a string to the server*/
-	bytes = write(sockfd, buf, strlen(buf));
-	printf("Bytes escritos %d\n", bytes);
-
-	close(sockfd);
-	exit(0);
 	
+	printf("user: %s\npass: %s\nhost: %s\npath: %s\n", user, password, host, path);
+			
+	return 0;
 }
