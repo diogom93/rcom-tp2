@@ -18,17 +18,17 @@
 #include <arpa/inet.h>
 
 #define BUF_SIZE 1024
-#define C_PORT 21
+#define C_PORT "21"
 
 void check_URL(char *url, char *user, char *password, char *host, char *path);
+char *build_command(char * cmd, char *arg);
 
 int main(int argc, char *argv[]) 
 {
-	int sd, res;
+	int sd, res, code, i;
 	char buf[BUF_SIZE];
-	char user[64], password[64], host[128], path[512];
-	struct hostent *h;
-	struct sockaddr_in channel;
+	char user[64], password[64], host[128], path[512], ip_str[INET6_ADDRSTRLEN], *cmd;
+	struct addrinfo hints, *serv_info, *aux_p;
 
 	printf("FTP Client\n");
 	printf("FEUP - Computer Networks - 2014/2015\n");
@@ -43,34 +43,84 @@ int main(int argc, char *argv[])
 	check_URL(argv[1], user, password, host, path);	
 	printf("User: %s\nPass: %s\nHost: %s\nPath: %s\n", user, password, host, path);
 	
-	h = gethostbyname(host);
-	if (h == NULL) {
-		printf("Couldn't find host!\n");
+	/* Fill up hints struct to pass it to getaddrinfo() */
+	
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC; /* By using AF_UNSPEC we make the application independent of IP version */
+	hints.ai_socktype = SOCK_STREAM; /* TPC stream sockets */
+	hints.ai_flags = AI_PASSIVE; /* This tells getaddrinfo() to fill IP */
+	
+	res = getaddrinfo(host, C_PORT, &hints, &serv_info);
+	if ( res != 0) {
+		printf("Error! Couldn't get host information!\n");
 		exit(1);
 	}
 	
-	memset(&channel, 0, sizeof(channel));
-	channel.sin_family = AF_INET;
-	memcpy(&channel.sin_addr.s_addr, h->h_addr, h->h_length);
-	channel.sin_port = htons(C_PORT);
+	printf("List of IP adresses for %s:\n", host);
+	for (aux_p = serv_info; aux_p != NULL; aux_p = aux_p->ai_next) {
+		void *addr;
+		char *ip_v;
+		
+		if (aux_p->ai_family == AF_INET) {
+			struct sockaddr_in *ipv4 = (struct sockaddr_in *) aux_p->ai_addr;
+			addr = &(ipv4->sin_addr);
+			ip_v = "IPv4";
+		} else {
+			struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *) aux_p->ai_addr;
+			addr = &(ipv6->sin6_addr);
+			ip_v = "IPv6"; 
+		}
+		
+		inet_ntop(aux_p->ai_family, addr, ip_str, sizeof(ip_str));
+		printf("%s: %s\n", ip_v, ip_str);
+	}
 	
-	sd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-		
-	if (sd < 0) {
-		printf("Couldn't create socket!\n");
+	sd = socket(serv_info->ai_family, serv_info->ai_socktype, serv_info->ai_protocol);
+	if (sd == -1) {
+		printf("Error! Couldn't create socket!\n");
 		exit(1);
 	}
-		
-	res = connect(sd, (struct sockaddr *)&channel, sizeof(channel));
-		
-	if (res < 0) {
-		printf("Couldn't connect!\n");
-		exit(1);
+	
+	res = connect(sd, serv_info->ai_addr, serv_info->ai_addrlen);
+	if (res == -1) {
+		printf("Error! Couldn't connect to host!\n");
 	}
+	
+	/* Server response */
+	
+	recv(sd, buf, BUF_SIZE, 0);
+	printf("\nR%s\n", buf);
+	memset(buf, 0, BUF_SIZE);
+	
+	/* USER command */
+	
+	cmd = build_command("USER ", user);
+	send(sd, cmd, strlen(cmd), 0);
+	recv(sd, buf, BUF_SIZE, 0);
+	printf("%s\n", buf);
+	memset(buf, 0, BUF_SIZE);
+	
+	/* PASS command */
+	
+	cmd = build_command("PASS ", password);
+	send(sd, cmd, strlen(cmd), 0);
+	recv(sd, buf, BUF_SIZE, 0);
+	printf("%s\n", buf);
+	memset(buf, 0, BUF_SIZE);
+	
+	/* PASV command */
+	
+	send(sd, "PASV", strlen("PASV"), 0);
+	recv(sd, buf, BUF_SIZE, 0);
+	printf("%s\n", buf);
+	memset(buf, 0, BUF_SIZE);
 	
 	close(sd);
+	freeaddrinfo(serv_info);
 	return 0;
 }
+
+/* Using this function the application can cover several cases of valid URL's */
 
 void check_URL(char *url, char *user, char *password, char *host, char *path) {
 	if (sscanf(url, "ftp://%[^:]:%[^@]@%[^/]/%s", user, password, host, path) == 4) {
@@ -80,31 +130,38 @@ void check_URL(char *url, char *user, char *password, char *host, char *path) {
 	} else if (sscanf(url, "ftp://%[^:@]:@%[^/]/%s", user, host, path) == 3) {
 		return;
 	} else if (sscanf(url, "ftp://%[^:@]@%[^/]/%s", user, host, path) == 3) {
-		strcpy(password, "Empty");
+		printf("Please enter email address: ");
+		scanf("%s", password);
 		return;
 	} else if (sscanf(url, "ftp://%[^:@]:@%[^/]", user, host) == 2) {
-		strcpy(password, "Empty");
+		printf("Please enter email address: ");
+		scanf("%s", password);
 		strcpy(path, "Empty");
 		return;
 	} else if (sscanf(url, "ftp://%[^:@]@%[^/]", user, host) == 2) {
-		strcpy(password, "Empty");
+		printf("Please enter email address: ");
+		scanf("%s", password);
 		strcpy(path, "Empty");
 		return;
 	} else if (sscanf(url, "ftp://@%[^:@/]/%s", host, path) == 2) {
-		strcpy(password, "Empty");
+		printf("Please enter email address: ");
+		scanf("%s", password);
 		strcpy(user, "anonymous");
 		return;
 	} else if (sscanf(url, "ftp://%[^:@/]/%s", host, path) == 2) {
-		strcpy(password, "Empty");
+		printf("Please enter email address: ");
+		scanf("%s", password);
 		strcpy(user, "anonymous");
 		return;
 	} else if (sscanf(url, "ftp://@%[^:@/]/", host) == 1) {
-		strcpy(password, "Empty");
+		printf("Please enter email address: ");
+		scanf("%s", password);
 		strcpy(user, "anonymous");
 		strcpy(path, "Empty");
 		return;
 	} else if (sscanf(url, "ftp://%[^:@/]/", host) == 1) {
-		strcpy(password, "Empty");
+		printf("Please enter email address: ");
+		scanf("%s", password);
 		strcpy(user, "anonymous");
 		strcpy(path, "Empty");
 		return;
@@ -112,4 +169,16 @@ void check_URL(char *url, char *user, char *password, char *host, char *path) {
 		printf("Error! URL should be in the following format: //<user>:<password>@<host>/<url-path>\n");
 		exit(1);
 	}
+}
+
+char * build_command (char * cmd, char * arg) {
+	char * command;
+	int cmd_len = sizeof(cmd) + sizeof(arg);
+	command = malloc(cmd_len);
+	
+	strcpy(command, cmd);
+	strcat(command, arg);
+	strcat(command, "\n");
+	
+	return command;
 }
