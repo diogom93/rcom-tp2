@@ -21,14 +21,16 @@
 #define C_PORT "21"
 
 void check_URL(char *url, char *user, char *password, char *host, char *path);
-char *build_command(char * cmd, char *arg);
+void send_command(char * cmd, char *arg, int sd);
+void get_answer(int sd, char * buf);
+void get_file(int sd, char * f_name);
 
 int main(int argc, char *argv[]) 
 {
-	int sd, res, code, i;
+	int sd, sd2, res, ip[4], port[2];
 	char buf[BUF_SIZE];
-	char user[64], password[64], host[128], path[512], ip_str[INET6_ADDRSTRLEN], *cmd;
-	struct addrinfo hints, *serv_info, *aux_p;
+	char user[64], password[64], host[128], path[512], new_port[10], new_ip[12], f_name[128], ip_str[INET6_ADDRSTRLEN];
+	struct addrinfo hints, *serv_info, *serv, *aux_p;
 
 	printf("FTP Client\n");
 	printf("FEUP - Computer Networks - 2014/2015\n");
@@ -47,7 +49,7 @@ int main(int argc, char *argv[])
 	
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC; /* By using AF_UNSPEC we make the application independent of IP version */
-	hints.ai_socktype = SOCK_STREAM; /* TPC stream sockets */
+	hints.ai_socktype = SOCK_STREAM; /* TCP stream sockets */
 	hints.ai_flags = AI_PASSIVE; /* This tells getaddrinfo() to fill IP */
 	
 	res = getaddrinfo(host, C_PORT, &hints, &serv_info);
@@ -88,34 +90,68 @@ int main(int argc, char *argv[])
 	
 	/* Server response */
 	
-	recv(sd, buf, BUF_SIZE, 0);
-	printf("\nR%s\n", buf);
-	memset(buf, 0, BUF_SIZE);
+	get_answer(sd, buf);
 	
 	/* USER command */
 	
-	cmd = build_command("USER ", user);
-	send(sd, cmd, strlen(cmd), 0);
-	recv(sd, buf, BUF_SIZE, 0);
-	printf("%s\n", buf);
-	memset(buf, 0, BUF_SIZE);
+	send_command("USER ", user, sd);
+	get_answer(sd, buf);
+	
 	
 	/* PASS command */
 	
-	cmd = build_command("PASS ", password);
-	send(sd, cmd, strlen(cmd), 0);
-	recv(sd, buf, BUF_SIZE, 0);
-	printf("%s\n", buf);
-	memset(buf, 0, BUF_SIZE);
+	send_command("PASS ", password, sd);
+	get_answer(sd, buf);
+	
+	/* CWD command */
+	
+	if (strcmp(path, "Empty") != 0) {
+		send_command("CWD ", path, sd);
+		get_answer(sd, buf);
+	}
 	
 	/* PASV command */
 	
-	send(sd, "PASV", strlen("PASV"), 0);
-	recv(sd, buf, BUF_SIZE, 0);
-	printf("%s\n", buf);
-	memset(buf, 0, BUF_SIZE);
+	send_command("PASV", NULL, sd);
+	get_answer(sd, buf);
 	
+	if (sscanf(buf, "%*d %*s %*s %*s (%d,%d,%d,%d,%d,%d).", &ip[0], &ip[1], &ip[2], &ip[3], &port[0], &port[1]) != 6) {
+		printf("Error! Couldn't read answer!\n");	
+		exit(1);
+	}
+ 	
+
+	port[0] = 256*port[0]+port[1];
+	sprintf(new_port, "%d", port[0]);
+	printf("New PORT: %s\n", new_port);
+
+	res = getaddrinfo(host, new_port, &hints, &serv);
+	if ( res != 0) {
+		printf("Error! Couldn't get host information!\n");
+		exit(1);
+	}
+
+	sd2 = socket(serv->ai_family, serv->ai_socktype, serv->ai_protocol);
+	if (sd == -1) {
+		printf("Error! Couldn't create socket!\n");
+		exit(1);
+	}
+	
+	res = connect(sd2, serv->ai_addr, serv->ai_addrlen);
+	if (res == -1) {
+		printf("Error! Couldn't connect to host!\n");
+		exit(1);
+	}
+	
+	printf("\nPlease input file to retrieve: ");
+	scanf("%s", f_name);
+	send_command("RETR ", f_name, sd);
+	get_file(sd2, f_name);
+	
+
+	close(sd2);
 	close(sd);
+	freeaddrinfo(serv);
 	freeaddrinfo(serv_info);
 	return 0;
 }
@@ -128,40 +164,34 @@ void check_URL(char *url, char *user, char *password, char *host, char *path) {
 	} else if (sscanf(url, "ftp://%[^:]:%[^@]@%[^/]", user, password, host) == 3) {
 		strcpy(path, "Empty");
 	} else if (sscanf(url, "ftp://%[^:@]:@%[^/]/%s", user, host, path) == 3) {
+		strcpy(password, "Empty");
 		return;
 	} else if (sscanf(url, "ftp://%[^:@]@%[^/]/%s", user, host, path) == 3) {
-		printf("Please enter email address: ");
-		scanf("%s", password);
+		strcpy(password, "Empty");
 		return;
 	} else if (sscanf(url, "ftp://%[^:@]:@%[^/]", user, host) == 2) {
-		printf("Please enter email address: ");
-		scanf("%s", password);
+		strcpy(password, "Empty");
 		strcpy(path, "Empty");
 		return;
 	} else if (sscanf(url, "ftp://%[^:@]@%[^/]", user, host) == 2) {
-		printf("Please enter email address: ");
-		scanf("%s", password);
+		strcpy(password, "Empty");
 		strcpy(path, "Empty");
 		return;
 	} else if (sscanf(url, "ftp://@%[^:@/]/%s", host, path) == 2) {
-		printf("Please enter email address: ");
-		scanf("%s", password);
+		strcpy(password, "Empty");
 		strcpy(user, "anonymous");
 		return;
 	} else if (sscanf(url, "ftp://%[^:@/]/%s", host, path) == 2) {
-		printf("Please enter email address: ");
-		scanf("%s", password);
+		strcpy(password, "Empty");
 		strcpy(user, "anonymous");
 		return;
 	} else if (sscanf(url, "ftp://@%[^:@/]/", host) == 1) {
-		printf("Please enter email address: ");
-		scanf("%s", password);
+		strcpy(password, "Empty");
 		strcpy(user, "anonymous");
 		strcpy(path, "Empty");
 		return;
 	} else if (sscanf(url, "ftp://%[^:@/]/", host) == 1) {
-		printf("Please enter email address: ");
-		scanf("%s", password);
+		strcpy(password, "Empty");
 		strcpy(user, "anonymous");
 		strcpy(path, "Empty");
 		return;
@@ -171,14 +201,57 @@ void check_URL(char *url, char *user, char *password, char *host, char *path) {
 	}
 }
 
-char * build_command (char * cmd, char * arg) {
-	char * command;
-	int cmd_len = sizeof(cmd) + sizeof(arg);
-	command = malloc(cmd_len);
+void send_command(char *cmd, char *arg, int sd) {
+	char command[517];
 	
-	strcpy(command, cmd);
-	strcat(command, arg);
-	strcat(command, "\n");
+	if (strcmp(cmd, "PASV") == 0) {
+		strcpy(command, cmd);
+		strcat(command, "\n");
+		send(sd, command, strlen(command), 0);
+	} else {
+		strcpy(command, cmd);
+		strcat(command, arg);
+		strcat(command, "\n");
+		send(sd, command, strlen(command), 0);
+	}
 	
-	return command;
+	memset(command, 0, sizeof(command));
+	return;
+}
+
+void get_answer(int sd, char * buf) {
+	int code;
+	
+	memset(buf, 0, BUF_SIZE);
+	recv(sd, buf, BUF_SIZE, 0);
+	printf("%s", buf);
+	
+	if (sscanf(buf, "%d %*s", &code) == 1) {
+		if (code >= 500) {
+			printf("Error! Command failed!\n");
+			exit(1);
+		} else {
+			return;
+		}
+	}
+}
+
+void get_file(int sd, char *f_name) {
+	char buf[BUF_SIZE];
+	FILE *fd;
+	
+	fd = fopen(f_name, "w");
+	if (fd == NULL) {
+		printf("Error! Couldn't create file!\n");
+		exit(1);
+	}
+	recv(sd, buf, BUF_SIZE, 0);
+	fputs(buf, fd);	
+	if (fclose(fd) == EOF) {
+		printf("Error! Couldn't save file!\n");
+		exit(1);
+	}
+	
+	printf("File saved sucessfully!\n");
+	return; 
 }
