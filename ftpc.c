@@ -29,7 +29,7 @@ int main(int argc, char *argv[])
 {
 	int sd, sd2, res, ip[4], port[2];
 	char buf[BUF_SIZE];
-	char user[64], password[64], host[128], path[512], new_port[10], new_ip[12], f_name[128], ip_str[INET6_ADDRSTRLEN];
+	char user[64], password[64], host[128], path[512], new_port[10], new_ip[256], f_name[128], ip_str[INET6_ADDRSTRLEN];
 	struct addrinfo hints, *serv_info, *serv, *aux_p;
 
 	printf("FTP Client\n");
@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 	
-	printf("List of IP adresses for %s:\n", host);
+	printf("\nList of IP adresses for %s:\n", host);
 	for (aux_p = serv_info; aux_p != NULL; aux_p = aux_p->ai_next) {
 		void *addr;
 		char *ip_v;
@@ -76,6 +76,8 @@ int main(int argc, char *argv[])
 		inet_ntop(aux_p->ai_family, addr, ip_str, sizeof(ip_str));
 		printf("%s: %s\n", ip_v, ip_str);
 	}
+	
+	printf("\n");
 	
 	sd = socket(serv_info->ai_family, serv_info->ai_socktype, serv_info->ai_protocol);
 	if (sd == -1) {
@@ -104,28 +106,32 @@ int main(int argc, char *argv[])
 	get_answer(sd, buf);
 	
 	/* CWD command */
-	
+
 	if (strcmp(path, "Empty") != 0) {
 		send_command("CWD ", path, sd);
 		get_answer(sd, buf);
 	}
 	
 	/* PASV command */
-	
+
 	send_command("PASV", NULL, sd);
 	get_answer(sd, buf);
 	
 	if (sscanf(buf, "%*d %*s %*s %*s (%d,%d,%d,%d,%d,%d).", &ip[0], &ip[1], &ip[2], &ip[3], &port[0], &port[1]) != 6) {
-		printf("Error! Couldn't read answer!\n");	
+		printf("Error! Couldn't read answer!\n");
 		exit(1);
 	}
  	
-
+	memset(new_ip, 0, sizeof(new_ip));
+	sprintf(new_ip, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+	printf("New IP: %s\n", new_ip);
 	port[0] = 256*port[0]+port[1];
+	memset(new_port, 0, sizeof(new_port));
 	sprintf(new_port, "%d", port[0]);
 	printf("New PORT: %s\n", new_port);
-
-	res = getaddrinfo(host, new_port, &hints, &serv);
+	
+	
+	res = getaddrinfo(new_ip, new_port, &hints, &serv);
 	if ( res != 0) {
 		printf("Error! Couldn't get host information!\n");
 		exit(1);
@@ -146,6 +152,7 @@ int main(int argc, char *argv[])
 	printf("\nPlease input file to retrieve: ");
 	scanf("%s", f_name);
 	send_command("RETR ", f_name, sd);
+	get_answer(sd, buf);
 	get_file(sd2, f_name);
 	
 
@@ -153,6 +160,8 @@ int main(int argc, char *argv[])
 	close(sd);
 	freeaddrinfo(serv);
 	freeaddrinfo(serv_info);
+	printf("Wow! 20/20!\nGoodbye!\n");
+	
 	return 0;
 }
 
@@ -201,6 +210,8 @@ void check_URL(char *url, char *user, char *password, char *host, char *path) {
 	}
 }
 
+/* This functions builds the command and sends it through the socket */
+
 void send_command(char *cmd, char *arg, int sd) {
 	char command[517];
 	
@@ -208,20 +219,26 @@ void send_command(char *cmd, char *arg, int sd) {
 		strcpy(command, cmd);
 		strcat(command, "\n");
 		send(sd, command, strlen(command), 0);
+		printf("%s", command);
 	} else {
 		strcpy(command, cmd);
 		strcat(command, arg);
 		strcat(command, "\n");
 		send(sd, command, strlen(command), 0);
+		printf("%s", command);
 	}
 	
 	memset(command, 0, sizeof(command));
 	return;
 }
 
+/* This function reads from socket and prints to STDOUT */
+/* If the answer code is >= 500 (i.e. error) the app aborts */
+
 void get_answer(int sd, char * buf) {
 	int code;
 	
+	sleep(1);
 	memset(buf, 0, BUF_SIZE);
 	recv(sd, buf, BUF_SIZE, 0);
 	printf("%s", buf);
@@ -235,6 +252,8 @@ void get_answer(int sd, char * buf) {
 		}
 	}
 }
+
+/* This functions opens the file, reads from socket and writes the file */
 
 void get_file(int sd, char *f_name) {
 	char buf[BUF_SIZE];
