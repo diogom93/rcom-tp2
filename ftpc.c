@@ -48,9 +48,9 @@ int main(int argc, char *argv[])
 	/* Fill up hints struct to pass it to getaddrinfo() */
 	
 	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_UNSPEC; /* By using AF_UNSPEC we make the application independent of IP version */
+	hints.ai_family = AF_INET; /* By using AF_UNSPEC we make the application independent of IP version */
 	hints.ai_socktype = SOCK_STREAM; /* TCP stream sockets */
-	hints.ai_flags = AI_PASSIVE; /* This tells getaddrinfo() to fill IP */
+	hints.ai_protocol = 0;
 	
 	res = getaddrinfo(host, C_PORT, &hints, &serv_info);
 	if ( res != 0) {
@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
 	}
 	
 	/* PASV command */
-
+	
 	send_command("PASV", NULL, sd);
 	get_answer(sd, buf);
 	
@@ -124,7 +124,7 @@ int main(int argc, char *argv[])
  	
 	memset(new_ip, 0, sizeof(new_ip));
 	sprintf(new_ip, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-	printf("New IP: %s\n", new_ip);
+	printf("\nNew IP: %s\n", new_ip);
 	port[0] = 256*port[0]+port[1];
 	memset(new_port, 0, sizeof(new_port));
 	sprintf(new_port, "%d", port[0]);
@@ -257,6 +257,7 @@ void get_answer(int sd, char * buf) {
 
 void get_file(int sd, char *f_name) {
 	char buf[BUF_SIZE];
+	int bytes_written = 1, bytes_read;
 	FILE *fd;
 	
 	fd = fopen(f_name, "w");
@@ -264,8 +265,11 @@ void get_file(int sd, char *f_name) {
 		printf("Error! Couldn't create file!\n");
 		exit(1);
 	}
-	recv(sd, buf, BUF_SIZE, 0);
-	fputs(buf, fd);	
+	
+	while (bytes_written != 0) {
+		bytes_read = recv(sd, buf, BUF_SIZE, 0);
+		bytes_written = fwrite(buf, sizeof(char), bytes_read, fd);
+	}
 	if (fclose(fd) == EOF) {
 		printf("Error! Couldn't save file!\n");
 		exit(1);
