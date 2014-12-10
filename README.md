@@ -12,9 +12,9 @@ First it establishes the connection with the server using sockets. Then it sends
 
 ## Compiling and running
 
-The application was developed with full IP version independency in mind. Unfortunately that independency made the application misbehave in some networks. To correct that, the address family was changed to AF_INET, that is, IPv4.
+The application was developed with full IP version independency in mind. Unfortunately that independency made the application misbehave in some networks. To correct that, the address family was changed to **AF_INET**, that is, IPv4.
 
-If you wish to use both IPv4 and IPv6 or only IPv6, change the hints.ai_family flag from AF_INET to AF_UNSPEC or AF_INET6, respectively.
+If you wish to use both IPv4 and IPv6 or only IPv6, change the **hints.ai_family** flag from **AF_INET** to **AF_UNSPEC** or **AF_INET6**, respectively.
 
 To compile just execute the following command:
 
