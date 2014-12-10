@@ -23,11 +23,12 @@
 void check_URL(char *url, char *user, char *password, char *host, char *path);
 void send_command(char * cmd, char *arg, int sd);
 void get_answer(int sd, char * buf);
+void get_new_args(char *ip, char *port, char *buf);
 void get_file(int sd, char * f_name);
 
 int main(int argc, char *argv[]) 
 {
-	int sd, sd2, res, ip[4], port[2];
+	int sd, sd2, res;
 	char buf[BUF_SIZE];
 	char user[64], password[64], host[128], path[512], new_port[10], new_ip[256], f_name[128], ip_str[INET6_ADDRSTRLEN];
 	struct addrinfo hints, *serv_info, *serv, *aux_p;
@@ -48,8 +49,8 @@ int main(int argc, char *argv[])
 	/* Fill up hints struct to pass it to getaddrinfo() */
 	
 	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET; /* By using AF_UNSPEC we make the application independent of IP version */
-	hints.ai_socktype = SOCK_STREAM; /* TCP stream sockets */
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = 0;
 	
 	res = getaddrinfo(host, C_PORT, &hints, &serv_info);
@@ -106,7 +107,7 @@ int main(int argc, char *argv[])
 	get_answer(sd, buf);
 	
 	/* CWD command */
-
+	sleep(1);
 	if (strcmp(path, "Empty") != 0) {
 		send_command("CWD ", path, sd);
 		get_answer(sd, buf);
@@ -116,20 +117,7 @@ int main(int argc, char *argv[])
 	
 	send_command("PASV", NULL, sd);
 	get_answer(sd, buf);
-	
-	if (sscanf(buf, "%*d %*s %*s %*s (%d,%d,%d,%d,%d,%d).", &ip[0], &ip[1], &ip[2], &ip[3], &port[0], &port[1]) != 6) {
-		printf("Error! Couldn't read answer!\n");
-		exit(1);
-	}
- 	
-	memset(new_ip, 0, sizeof(new_ip));
-	sprintf(new_ip, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-	printf("\nNew IP: %s\n", new_ip);
-	port[0] = 256*port[0]+port[1];
-	memset(new_port, 0, sizeof(new_port));
-	sprintf(new_port, "%d", port[0]);
-	printf("New PORT: %s\n", new_port);
-	
+	get_new_args(new_ip, new_port, buf);
 	
 	res = getaddrinfo(new_ip, new_port, &hints, &serv);
 	if ( res != 0) {
@@ -149,13 +137,50 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 	
+	/* LIST Command - Prints directory contents */
+	
+	send_command("LIST", buf, sd);
+	get_answer(sd, buf);
+	get_answer(sd2, buf);
+	
+	close(sd2);
+	
+	/* PASV command */
+		
+	send_command("PASV", NULL, sd);
+	get_answer(sd, buf);
+	get_new_args(new_ip, new_port, buf);
+		
+	res = getaddrinfo(new_ip, new_port, &hints, &serv);
+	if ( res != 0) {
+		printf("Error! Couldn't get host information!\n");
+		exit(1);
+	}
+
+	sd2 = socket(serv->ai_family, serv->ai_socktype, serv->ai_protocol);
+	if (sd == -1) {
+		printf("Error! Couldn't create socket!\n");
+		exit(1);
+	}
+		
+	res = connect(sd2, serv->ai_addr, serv->ai_addrlen);
+	if (res == -1) {
+		printf("Error! Couldn't connect to host!\n");
+		exit(1);
+	}
+
+
 	printf("\nPlease input file to retrieve: ");
-	scanf("%s", f_name);
+	fgets(f_name, sizeof(f_name), stdin);
+	if (f_name[strlen(f_name) - 1] == '\n')
+		f_name[strlen(f_name) - 1] = '\0';
 	send_command("RETR ", f_name, sd);
 	get_answer(sd, buf);
 	get_file(sd2, f_name);
 	
-
+	
+	/* Close connections */ 
+	
 	close(sd2);
 	close(sd);
 	freeaddrinfo(serv);
@@ -215,7 +240,7 @@ void check_URL(char *url, char *user, char *password, char *host, char *path) {
 void send_command(char *cmd, char *arg, int sd) {
 	char command[517];
 	
-	if (strcmp(cmd, "PASV") == 0) {
+	if (strcmp(cmd, "PASV") == 0 || strcmp(cmd, "LIST") == 0) {
 		strcpy(command, cmd);
 		strcat(command, "\n");
 		send(sd, command, strlen(command), 0);
@@ -253,11 +278,32 @@ void get_answer(int sd, char * buf) {
 	}
 }
 
+/* This function gets the IP and Port for the passive connection */
+
+void get_new_args(char *new_ip, char *new_port, char *buf) {
+	int ip[4], port[2];
+	
+	if (sscanf(buf, "%*d %*s %*s %*s (%d,%d,%d,%d,%d,%d).", &ip[0], &ip[1], &ip[2], &ip[3], &port[0], &port[1]) != 6) {
+		printf("Error! Couldn't read answer!\n");
+		exit(1);
+	}
+		 	
+	memset(new_ip, 0, strlen(new_ip));
+	sprintf(new_ip, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+	printf("\nNew IP: %s\n", new_ip);
+	port[0] = 256*port[0]+port[1];
+	memset(new_port, 0, strlen(new_port));
+	sprintf(new_port, "%d", port[0]);
+	printf("New PORT: %s\n", new_port);
+	
+	return;
+}
+
 /* This functions opens the file, reads from socket and writes the file */
 
 void get_file(int sd, char *f_name) {
 	char buf[BUF_SIZE];
-	int bytes_written = 1, bytes_read;
+	int written = 1, read;
 	FILE *fd;
 	
 	fd = fopen(f_name, "w");
@@ -266,9 +312,9 @@ void get_file(int sd, char *f_name) {
 		exit(1);
 	}
 	
-	while (bytes_written != 0) {
-		bytes_read = recv(sd, buf, BUF_SIZE, 0);
-		bytes_written = fwrite(buf, sizeof(char), bytes_read, fd);
+	while (written != 0) {
+		read = recv(sd, buf, BUF_SIZE, 0);
+		written = fwrite(buf, sizeof(char), read, fd);
 	}
 	if (fclose(fd) == EOF) {
 		printf("Error! Couldn't save file!\n");
