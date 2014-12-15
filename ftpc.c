@@ -28,7 +28,7 @@ void get_file(int sd, char * f_name);
 
 int main(int argc, char *argv[]) 
 {
-	int sd, sd2, res;
+	int sd, sd2, res, ip[4], port[2], i, j;
 	char buf[BUF_SIZE];
 	char user[64], password[64], host[128], path[512], new_port[10], new_ip[256], f_name[128], ip_str[INET6_ADDRSTRLEN];
 	struct addrinfo hints, *serv_info, *serv, *aux_p;
@@ -106,18 +106,23 @@ int main(int argc, char *argv[])
 	send_command("PASS ", password, sd);
 	get_answer(sd, buf);
 	
-	/* CWD command */
-	sleep(1);
-	if (strcmp(path, "Empty") != 0) {
-		send_command("CWD ", path, sd);
-		get_answer(sd, buf);
-	}
-	
 	/* PASV command */
 	
 	send_command("PASV", NULL, sd);
 	get_answer(sd, buf);
-	get_new_args(new_ip, new_port, buf);
+	
+	if (sscanf(buf, "%*[^(](%d,%d,%d,%d,%d,%d).", &ip[0], &ip[1], &ip[2], &ip[3], &port[0], &port[1]) != 6) {
+			printf("Error! Couldn't read answer!\n");
+			exit(1);
+		}
+			 	
+	memset(new_ip, 0, strlen(new_ip));
+	sprintf(new_ip, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+	printf("\nNew IP: %s\n", new_ip);
+	port[0] = 256*port[0]+port[1];
+	memset(new_port, 0, strlen(new_port));
+	sprintf(new_port, "%d", port[0]);
+	printf("New PORT: %s\n", new_port);
 	
 	res = getaddrinfo(new_ip, new_port, &hints, &serv);
 	if ( res != 0) {
@@ -137,47 +142,26 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 	
-	/* LIST Command - Prints directory contents */
-	
-	send_command("LIST", buf, sd);
-	get_answer(sd, buf);
-	get_answer(sd2, buf);
-	
-	close(sd2);
-	
-	/* PASV command */
-		
-	send_command("PASV", NULL, sd);
-	get_answer(sd, buf);
-	get_new_args(new_ip, new_port, buf);
-		
-	res = getaddrinfo(new_ip, new_port, &hints, &serv);
-	if ( res != 0) {
-		printf("Error! Couldn't get host information!\n");
-		exit(1);
-	}
+	/* RETR command */
 
-	sd2 = socket(serv->ai_family, serv->ai_socktype, serv->ai_protocol);
-	if (sd == -1) {
-		printf("Error! Couldn't create socket!\n");
-		exit(1);
-	}
-		
-	res = connect(sd2, serv->ai_addr, serv->ai_addrlen);
-	if (res == -1) {
-		printf("Error! Couldn't connect to host!\n");
-		exit(1);
-	}
-
-
-	printf("\nPlease input file to retrieve: ");
-	fgets(f_name, sizeof(f_name), stdin);
-	if (f_name[strlen(f_name) - 1] == '\n')
-		f_name[strlen(f_name) - 1] = '\0';
-	send_command("RETR ", f_name, sd);
+	send_command("RETR ", path, sd);
 	get_answer(sd, buf);
+	
+	i = strlen(path) - 1;
+	while (true) {
+		if (path[i] == '/') {
+			i++; 
+			break;
+		}
+		
+		i--;	
+	}
+	for (j = 0; i < strlen(path); i++, j++) {
+		f_name[j] = path[i];
+	}
+	f_name[j] = '\0';
+	
 	get_file(sd2, f_name);
-	
 	
 	/* Close connections */ 
 	
@@ -185,7 +169,8 @@ int main(int argc, char *argv[])
 	close(sd);
 	freeaddrinfo(serv);
 	freeaddrinfo(serv_info);
-	printf("Wow! 20/20!\nGoodbye!\n");
+	
+	printf("Bye!\n");
 	
 	return 0;
 }
@@ -193,41 +178,11 @@ int main(int argc, char *argv[])
 /* Using this function the application can cover several cases of valid URL's */
 
 void check_URL(char *url, char *user, char *password, char *host, char *path) {
-	if (sscanf(url, "ftp://%[^:]:%[^@]@%[^/]/%s", user, password, host, path) == 4) {
+	if (sscanf(url, "ftp://%[^:]:%[^@]@%[^/]/%[^\n]", user, password, host, path) == 4) {
 		return;
-	} else if (sscanf(url, "ftp://%[^:]:%[^@]@%[^/]", user, password, host) == 3) {
-		strcpy(path, "Empty");
-	} else if (sscanf(url, "ftp://%[^:@]:@%[^/]/%s", user, host, path) == 3) {
-		strcpy(password, "Empty");
-		return;
-	} else if (sscanf(url, "ftp://%[^:@]@%[^/]/%s", user, host, path) == 3) {
-		strcpy(password, "Empty");
-		return;
-	} else if (sscanf(url, "ftp://%[^:@]:@%[^/]", user, host) == 2) {
-		strcpy(password, "Empty");
-		strcpy(path, "Empty");
-		return;
-	} else if (sscanf(url, "ftp://%[^:@]@%[^/]", user, host) == 2) {
-		strcpy(password, "Empty");
-		strcpy(path, "Empty");
-		return;
-	} else if (sscanf(url, "ftp://@%[^:@/]/%s", host, path) == 2) {
-		strcpy(password, "Empty");
+	} else if (sscanf(url, "ftp://%[^:@/]/%[^\n]", host, path) == 2) {
+		strcpy(password, "empty");
 		strcpy(user, "anonymous");
-		return;
-	} else if (sscanf(url, "ftp://%[^:@/]/%s", host, path) == 2) {
-		strcpy(password, "Empty");
-		strcpy(user, "anonymous");
-		return;
-	} else if (sscanf(url, "ftp://@%[^:@/]/", host) == 1) {
-		strcpy(password, "Empty");
-		strcpy(user, "anonymous");
-		strcpy(path, "Empty");
-		return;
-	} else if (sscanf(url, "ftp://%[^:@/]/", host) == 1) {
-		strcpy(password, "Empty");
-		strcpy(user, "anonymous");
-		strcpy(path, "Empty");
 		return;
 	} else {
 		printf("Error! URL should be in the following format: //<user>:<password>@<host>/<url-path>\n");
@@ -240,7 +195,7 @@ void check_URL(char *url, char *user, char *password, char *host, char *path) {
 void send_command(char *cmd, char *arg, int sd) {
 	char command[517];
 	
-	if (strcmp(cmd, "PASV") == 0 || strcmp(cmd, "LIST") == 0) {
+	if (strcmp(cmd, "PASV") == 0) {
 		strcpy(command, cmd);
 		strcat(command, "\n");
 		send(sd, command, strlen(command), 0);
@@ -278,27 +233,6 @@ void get_answer(int sd, char * buf) {
 	}
 }
 
-/* This function gets the IP and Port for the passive connection */
-
-void get_new_args(char *new_ip, char *new_port, char *buf) {
-	int ip[4], port[2];
-	
-	if (sscanf(buf, "%*d %*s %*s %*s (%d,%d,%d,%d,%d,%d).", &ip[0], &ip[1], &ip[2], &ip[3], &port[0], &port[1]) != 6) {
-		printf("Error! Couldn't read answer!\n");
-		exit(1);
-	}
-		 	
-	memset(new_ip, 0, strlen(new_ip));
-	sprintf(new_ip, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-	printf("\nNew IP: %s\n", new_ip);
-	port[0] = 256*port[0]+port[1];
-	memset(new_port, 0, strlen(new_port));
-	sprintf(new_port, "%d", port[0]);
-	printf("New PORT: %s\n", new_port);
-	
-	return;
-}
-
 /* This functions opens the file, reads from socket and writes the file */
 
 void get_file(int sd, char *f_name) {
@@ -306,7 +240,7 @@ void get_file(int sd, char *f_name) {
 	int written = 1, read;
 	FILE *fd;
 	
-	fd = fopen(f_name, "w");
+	fd = fopen(f_name, "wb");
 	if (fd == NULL) {
 		printf("Error! Couldn't create file!\n");
 		exit(1);
