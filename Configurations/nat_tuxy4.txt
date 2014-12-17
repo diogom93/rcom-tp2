@@ -1,0 +1,2 @@
+access-list 1 permit 172.16.20.0 0.0.0.255
+access-list 1 permit 172.16.21.0 0.0.0.255

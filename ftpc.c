@@ -148,7 +148,7 @@ int main(int argc, char *argv[])
 	get_answer(sd, buf);
 	
 	i = strlen(path) - 1;
-	while (true) {
+	while (i > 0) {
 		if (path[i] == '/') {
 			i++; 
 			break;
@@ -185,7 +185,7 @@ void check_URL(char *url, char *user, char *password, char *host, char *path) {
 		strcpy(user, "anonymous");
 		return;
 	} else {
-		printf("Error! URL should be in the following format: //<user>:<password>@<host>/<url-path>\n");
+		printf("Error! URL should be in the following format: ftp://<user>:<password>@<host>/<url-path>\n");
 		exit(1);
 	}
 }
@@ -205,7 +205,11 @@ void send_command(char *cmd, char *arg, int sd) {
 		strcat(command, arg);
 		strcat(command, "\n");
 		send(sd, command, strlen(command), 0);
-		printf("%s", command);
+		if (strcmp(cmd, "PASS ") == 0) {
+			printf("PASS *****\n");
+		} else {
+			printf("%s", command);
+		}
 	}
 	
 	memset(command, 0, sizeof(command));
@@ -237,18 +241,18 @@ void get_answer(int sd, char * buf) {
 
 void get_file(int sd, char *f_name) {
 	char buf[BUF_SIZE];
-	int written = 1, read;
+	int bytes_written = 1, bytes_read;
 	FILE *fd;
 	
-	fd = fopen(f_name, "wb");
+	fd = fopen(f_name, "w");
 	if (fd == NULL) {
 		printf("Error! Couldn't create file!\n");
 		exit(1);
 	}
 	
-	while (written != 0) {
-		read = recv(sd, buf, BUF_SIZE, 0);
-		written = fwrite(buf, sizeof(char), read, fd);
+	while (bytes_written != 0) {
+		bytes_read = recv(sd, buf, BUF_SIZE, 0);
+		bytes_written = fwrite(buf, sizeof(char), bytes_read, fd);
 	}
 	if (fclose(fd) == EOF) {
 		printf("Error! Couldn't save file!\n");
