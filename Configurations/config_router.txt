@@ -1,0 +1,15 @@
+configure terminal
+
+interface fastethernet 0/0
+ip address 172.16.21.254
+no shutdown
+exit
+
+interface fastethernet 0/1
+ip address 172.16.2.29
+no shutdown
+exit
+
+ip route 0.0.0.0 0.0.0.0 172.16.2.254
+ip route 172.16.20.0 255.255.255.0 172.16.21.253
+end
