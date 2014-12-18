@@ -180,6 +180,9 @@ int main(int argc, char *argv[])
 void check_URL(char *url, char *user, char *password, char *host, char *path) {
 	if (sscanf(url, "ftp://%[^:]:%[^@]@%[^/]/%[^\n]", user, password, host, path) == 4) {
 		return;
+	} else if (sscanf(url, "ftp://%[^@]@%[^/]/%[^\n]", user, host, path) == 3) {
+		strcpy(password, "empty");
+		return;
 	} else if (sscanf(url, "ftp://%[^:@/]/%[^\n]", host, path) == 2) {
 		strcpy(password, "empty");
 		strcpy(user, "anonymous");
@@ -228,7 +231,7 @@ void get_answer(int sd, char * buf) {
 	printf("%s", buf);
 	
 	if (sscanf(buf, "%d %*s", &code) == 1) {
-		if (code >= 500) {
+		if (code >= 400) {
 			printf("Error! Command failed!\n");
 			exit(1);
 		} else {
