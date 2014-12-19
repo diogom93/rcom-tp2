@@ -23,7 +23,6 @@
 void check_URL(char *url, char *user, char *password, char *host, char *path);
 void send_command(char * cmd, char *arg, int sd);
 void get_answer(int sd, char * buf);
-void get_new_args(char *ip, char *port, char *buf);
 void get_file(int sd, char * f_name);
 
 int main(int argc, char *argv[]) 
@@ -131,7 +130,7 @@ int main(int argc, char *argv[])
 	}
 
 	sd2 = socket(serv->ai_family, serv->ai_socktype, serv->ai_protocol);
-	if (sd == -1) {
+	if (sd2 == -1) {
 		printf("Error! Couldn't create socket!\n");
 		exit(1);
 	}
